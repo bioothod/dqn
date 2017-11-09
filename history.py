@@ -31,7 +31,9 @@ class history(object):
         return self.history[(self.start + idx) % self.max_size]
 
     def sample(self, size):
-        return random.sample(self.history, min(size, self.size()))
+        indexes = range(self.start, self.end)
+        index_sample = random.sample(indexes, min(size, self.size()))
+        return [self.history[idx % self.max_size] for idx in index_sample]
 
     def whole(self):
         ret = [0] * self.size()
