@@ -143,6 +143,6 @@ class qlearn(object):
 
             rewards.append(reward)
 
-            print("{i:4d}: steps: {ts:6d}, epsilon: {eps:.2f}, average reward per {per:3d} last episodes: {rev:.2f}".format(
-                i=i, ts=self.total_steps, eps=self.epsilon,
-                per=rewards.size(), rev=np.mean(rewards.whole())))
+            print("{:4d}: steps: {:6d}, epsilon: {:.2f}, average reward per {:3d} last episodes: {:.2f}".format(
+                i, self.total_steps, self.epsilon,
+                rewards.size(), np.mean(rewards.whole())))
