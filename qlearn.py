@@ -16,6 +16,8 @@ import config as _config
 
 class qlearn(object):
     def __init__(self, config):
+        self.total_steps = 0
+
         self.env = gym.make(config.get('game'))
 
         self.input_shape = config.get('input_shape')
@@ -71,11 +73,11 @@ class qlearn(object):
         return action_idx
 
     def get_predicted_action(self, s):
-        q = self.main.predict(s.vector())
+        q = self.main.predict([s.read()])
         return np.argmax(q)
 
-    def store(self, data, t):
-        if self.epsilon > self.epsilon_end and t > self.initial_explore_steps:
+    def store(self, data):
+        if self.epsilon > self.epsilon_end and self.total_steps > self.initial_explore_steps:
             self.epsilon -= (self.epsilon_start - self.epsilon_end) / self.total_explore_steps
 
         self.history.append(data)
@@ -117,18 +119,16 @@ class qlearn(object):
         s = self.reset()
         done = False
         total_reward = 0
-        steps = 0
 
         while not done:
             action = self.get_action(s)
 
             obs, reward, done, info = self.env.step(action)
             sn = self.new_state(obs)
-            self.history.append((s, action, reward, sn, done))
-            steps += 1
-            #print("reward: {}, done: {}".format(reward, done))
+            self.store((s, action, reward, sn, done))
+            self.total_steps += 1
 
-            if self.history.size() > self.batch_size and steps % 10 == 0:
+            if self.history.size() > self.batch_size:
                 self.train()
 
             s = sn
@@ -143,4 +143,6 @@ class qlearn(object):
 
             rewards.append(reward)
 
-            print("{}: average reward per {} last episodes: {}".format(i, rewards.size(), np.mean(rewards.whole())))
+            print("{i:4d}: steps: {ts:6d}, epsilon: {eps:.2f}, average reward per {per:3d} last episodes: {rev:.2f}".format(
+                i=i, ts=self.total_steps, eps=self.epsilon,
+                per=rewards.size(), rev=np.mean(rewards.whole())))
