@@ -24,8 +24,8 @@ if __name__ == '__main__':
     c.put('discount_gamma', 0.99)
     c.put('epsilon_start', 1.0)
     c.put('epsilon_end', 0.001)
-    c.put('initial_explore_steps', 10000)
-    c.put('total_explore_steps', 150000)
+    c.put('initial_explore_steps', 5000)
+    c.put('total_explore_steps', 100000)
 
     c.put('learning_rate_start', 0.01)
     c.put('learning_rate_step', 50000)
