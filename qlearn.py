@@ -25,6 +25,11 @@ class qlearn(object):
 
         self.batch_size = config.get('batch_size')
 
+        self.train_interval = config.get('train_interval')
+        self.start_train_after_steps = config.get('start_train_after_steps')
+
+        self.update_follower_steps = config.get('update_follower_steps')
+
         self.current_state = state.state(self.input_shape, self.state_steps)
 
         self.actions = self.env.action_space.n
@@ -45,7 +50,12 @@ class qlearn(object):
         self.summary_writer = tf.summary.FileWriter(output_path)
         config.put('summary_writer', self.summary_writer) # used in network
 
-        self.main = network.network(config)
+        with tf.variable_scope('main') as vscope:
+            self.main = network.network('main', config)
+        with tf.variable_scope('follower') as vscope:
+            self.follower = network.network('follower', config)
+
+        self.follower.import_params(self.main.export_params(), 0)
 
     def new_state(self, state):
         state = 0.2126 * state[:, :, 0] + 0.7152 * state[:, :, 1] + 0.0722 * state[:, :, 2]
@@ -83,7 +93,7 @@ class qlearn(object):
         self.history.append(data)
 
     def train(self):
-        batch = self.history.sample(self.batch_size)
+        batch = self.history.sample(self.batch_size * self.train_interval)
 
         states_shape = (len(batch), self.state_steps, self.input_shape[0], self.input_shape[1])
         states = np.ndarray(shape=states_shape)
@@ -99,8 +109,10 @@ class qlearn(object):
             states[idx] = s.read()
             next_states[idx] = sn.read()
 
-        qvals = self.main.predict(states)
-        next_qvals = self.main.predict(next_states)
+        qvals = self.follower.predict(states)
+        next_qvals = self.follower.predict(next_states)
+
+        #print("q1: {}".format(qvals))
 
         for idx, e in enumerate(batch):
             s, a, r, sn, done = e
@@ -110,15 +122,21 @@ class qlearn(object):
                 qmax_next = 0
 
             current_qa = qvals[idx][a]
+            # clip Q value to [-1;+1] interval
+            #qsa = min(1, max(-1, (1. - self.alpha) * current_qa + self.alpha * (r + self.discount_gamma * qmax_next)))
             qsa = (1. - self.alpha) * current_qa + self.alpha * (r + self.discount_gamma * qmax_next)
             qvals[idx][a] = qsa
 
+        #print("q2: {}".format(qvals))
         self.main.train(states, qvals)
+        if self.main.train_steps % self.update_follower_steps == 0:
+            self.follower.import_params(self.main.export_params(), 0)
 
     def episode(self):
         s = self.reset()
         done = False
         total_reward = 0
+        steps = 0
 
         while not done:
             action = self.get_action(s)
@@ -127,8 +145,9 @@ class qlearn(object):
             sn = self.new_state(obs)
             self.store((s, action, reward, sn, done))
             self.total_steps += 1
+            steps += 1
 
-            if self.history.size() > self.batch_size:
+            if steps % self.train_interval == 0 and self.total_steps > self.start_train_after_steps:
                 self.train()
 
             s = sn
