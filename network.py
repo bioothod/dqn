@@ -20,14 +20,14 @@ class network(object):
         input_shape = config.get('input_shape')
         state_steps = config.get('state_steps')
         actions = config.get('actions')
-        states = tf.placeholder(tf.float32, [None, state_steps, input_shape[0], input_shape[1]], name='states')
+        states = tf.placeholder(tf.float32, [None, input_shape[0], input_shape[1], state_steps], name='states')
         qvals = tf.placeholder(tf.float32, [None, actions], name='qvals')
 
-        input_layer = tf.reshape(states, [-1, input_shape[0], input_shape[1], state_steps])
+        #input_layer = tf.reshape(states, [-1, input_shape[0], input_shape[1], state_steps])
 
         prelu_alpha = 0.0001
 
-        c1 = tf.layers.conv2d(inputs=input_layer, filters=32, kernel_size=8, strides=4, padding='same',
+        c1 = tf.layers.conv2d(inputs=states, filters=32, kernel_size=8, strides=4, padding='same',
                 activation=tf.contrib.keras.layers.PReLU(alpha_initializer=tf.constant_initializer(prelu_alpha)))
         c2 = tf.layers.conv2d(inputs=c1, filters=32, kernel_size=4, strides=2, padding='same',
                 activation=tf.contrib.keras.layers.PReLU(alpha_initializer=tf.constant_initializer(prelu_alpha)))

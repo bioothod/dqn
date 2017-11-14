@@ -62,7 +62,7 @@ class qlearn(object):
         self.total_steps = 0
 
         self.env = gym.make(config.get('game'))
-        self.env = MaxAndSkipEnv(self.env)
+        #self.env = MaxAndSkipEnv(self.env)
         self.env = FireResetEnv(self.env)
 
         self.input_shape = config.get('input_shape')
@@ -140,7 +140,7 @@ class qlearn(object):
     def train(self):
         batch = self.history.sample(self.batch_size * self.train_interval)
 
-        states_shape = (len(batch), self.state_steps, self.input_shape[0], self.input_shape[1])
+        states_shape = (len(batch), self.input_shape[0], self.input_shape[1], self.state_steps)
         states = np.ndarray(shape=states_shape)
         next_states = np.ndarray(shape=states_shape)
 
