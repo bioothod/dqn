@@ -34,7 +34,8 @@ class network(object):
 
         flat = tf.reshape(c2, [-1, np.prod(c2.get_shape().as_list()[1:])])
 
-        kinit = tf.contrib.layers.xavier_initializer()
+        #kinit = tf.contrib.layers.xavier_initializer()
+        kinit = tf.random_normal_initializer(0, 0.01)
 
         self.dense = tf.layers.dense(inputs=flat, units=config.get('dense_layer_units'),
                 activation=tf.contrib.keras.layers.PReLU(alpha_initializer=tf.constant_initializer(prelu_alpha)),
@@ -43,7 +44,7 @@ class network(object):
                 kernel_initializer=kinit,
                 bias_initializer=tf.random_normal_initializer(0, 0.1))
 
-        self.output = tf.layers.dense(inputs=self.dense, units=actions, use_bias=True, name='output_layer',
+        self.output = tf.layers.dense(inputs=self.dense, units=actions, use_bias=False, name='output_layer',
                 kernel_initializer=kinit,
                 kernel_regularizer=tf.nn.l2_loss,
                 bias_initializer=tf.random_normal_initializer(0, 0.1))
@@ -59,6 +60,7 @@ class network(object):
             if self.scope != get_scope_name(v.name):
                 continue
 
+            #self.summary_all.append(tf.summary.histogram("{}".format(v.name), v))
             ev = tf.placeholder(tf.float32, None, name=get_transform_placeholder_name(v.name))
             self.assign_ops.append(tf.assign(v, ev, validate_shape=False))
 
@@ -72,9 +74,12 @@ class network(object):
 
             out_in = qvals * x
             sum_in = tf.reduce_sum(out_in, axis=-1)
-            self.summary_all.append(tf.summary.scalar("qvals_{0}".format(i), tf.reduce_mean(sum_in)))
+            self.summary_all.append(tf.summary.scalar("qvals_input_{0}".format(i), tf.reduce_mean(sum_in)))
 
-        self.summary_all.append(tf.summary.histogram("qvals", qvals))
+            self.summary_all.append(tf.summary.scalar("qvals_diff_{0}".format(i), tf.reduce_mean(sum - sum_in)))
+
+        self.summary_all.append(tf.summary.histogram("actions", tf.argmax(qvals, axis=1)))
+        self.summary_all.append(tf.summary.histogram("qvals_input", qvals))
         self.summary_all.append(tf.summary.histogram("qvals_pred", self.output))
 
         self.global_step = tf.get_variable('global_step', [], initializer=tf.constant_initializer(0), trainable=False)
@@ -83,6 +88,9 @@ class network(object):
 
         self.summary_all.append(tf.summary.scalar('learning_rate', self.learning_rate))
         self.summary_all.append(tf.summary.scalar('global_step', self.global_step))
+
+        train_steps_tensor = tf.placeholder(tf.int32, [], name='train_steps')
+        self.summary_all.append(tf.summary.scalar('train_steps', train_steps_tensor))
 
         self.summary_merged = tf.summary.merge(self.summary_all)
 
@@ -102,12 +110,13 @@ class network(object):
         self.session.run(init)
 
     def train(self, states, qvals):
+        self.train_steps += 1
         ret = self.session.run([self.summary_merged, self.optimizer_step, self.global_step], feed_dict={
                 self.scope + '/states:0': states,
                 self.scope + '/qvals:0': qvals,
+                self.scope + '/train_steps:0': self.train_steps,
             })
 
-        self.train_steps += 1
         if self.train_steps % self.summary_update_steps == 0:
             summary = ret[0]
             global_step = ret[2]
