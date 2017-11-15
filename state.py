@@ -32,10 +32,7 @@ class state(object):
         self.reshape = True
 
     def merge(self):
-        #self.value = np.concatenate(self.steps, axis=len(self.shape)-1)
-        self.value = np.ndarray((self.shape[0], self.shape[1], self.size))
-        for i, s in enumerate(self.steps):
-            self.value[:,:,i] = s
+        self.value = np.concatenate(self.steps, axis=len(self.shape)-1)
         self.reshape = False
 
     def read(self):
