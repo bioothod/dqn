@@ -62,7 +62,7 @@ class qlearn(object):
         self.total_steps = 0
 
         self.env = gym.make(config.get('game'))
-        #self.env = MaxAndSkipEnv(self.env)
+        self.env = MaxAndSkipEnv(self.env)
         self.env = FireResetEnv(self.env)
 
         self.input_shape = config.get('input_shape')
@@ -107,7 +107,7 @@ class qlearn(object):
 
         state = state.astype(np.float32)
         res = cv2.resize(state, (self.input_shape[0], self.input_shape[1]))
-        #res /= 255.
+        res /= 255.
 
         res = np.reshape(res, self.input_shape)
 
@@ -121,15 +121,14 @@ class qlearn(object):
 
     def get_action(self, s):
         if np.random.rand() <= self.epsilon:
-            action_idx = random.randrange(self.actions)
+            action_idx = self.env.action_space.sample()
         else:
             action_idx = self.get_predicted_action(s)
 
         return action_idx
 
     def get_predicted_action(self, s):
-        q = self.main.predict([s.read()])
-        return np.argmax(q)
+        return np.argmax(self.follower.predict([s.read()]), axis=1)
 
     def store(self, data):
         if self.epsilon > self.epsilon_end and self.total_steps > self.initial_explore_steps:
@@ -140,7 +139,7 @@ class qlearn(object):
     def train(self):
         batch = self.history.sample(self.batch_size * self.train_interval)
 
-        states_shape = (len(batch), self.input_shape[0], self.input_shape[1], self.state_steps)
+        states_shape = (len(batch), self.input_shape[0], self.input_shape[1], self.input_shape[2]*self.state_steps)
         states = np.ndarray(shape=states_shape)
         next_states = np.ndarray(shape=states_shape)
 

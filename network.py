@@ -20,38 +20,30 @@ class network(object):
         input_shape = config.get('input_shape')
         state_steps = config.get('state_steps')
         actions = config.get('actions')
-        states = tf.placeholder(tf.float32, [None, input_shape[0], input_shape[1], state_steps], name='states')
+        states = tf.placeholder(tf.float32, [None, input_shape[0], input_shape[1], input_shape[2]*state_steps], name='states')
         qvals = tf.placeholder(tf.float32, [None, actions], name='qvals')
 
-        #input_layer = tf.reshape(states, [-1, input_shape[0], input_shape[1], state_steps])
-
-        prelu_alpha = 0.0001
+        input_layer = tf.reshape(states, [-1, input_shape[0], input_shape[1], input_shape[2]*state_steps])
 
         c1 = tf.layers.conv2d(inputs=states, filters=32, kernel_size=8, strides=4, padding='same',
-                activation=tf.contrib.keras.layers.PReLU(alpha_initializer=tf.constant_initializer(prelu_alpha)))
-        c2 = tf.layers.conv2d(inputs=c1, filters=32, kernel_size=4, strides=2, padding='same',
-                activation=tf.contrib.keras.layers.PReLU(alpha_initializer=tf.constant_initializer(prelu_alpha)))
+                activation=tf.nn.relu)
+        c2 = tf.layers.conv2d(inputs=c1, filters=64, kernel_size=4, strides=2, padding='same',
+                activation=tf.nn.relu)
 
         flat = tf.reshape(c2, [-1, np.prod(c2.get_shape().as_list()[1:])])
 
-        #kinit = tf.contrib.layers.xavier_initializer()
-        kinit = tf.random_normal_initializer(0, 0.01)
+        kinit = tf.contrib.layers.xavier_initializer()
+        #kinit = tf.random_normal_initializer(0, 0.01)
 
         self.dense = tf.layers.dense(inputs=flat, units=config.get('dense_layer_units'),
-                activation=tf.contrib.keras.layers.PReLU(alpha_initializer=tf.constant_initializer(prelu_alpha)),
-                use_bias=True, name='dense_layer',
-                kernel_regularizer=tf.nn.l2_loss,
-                kernel_initializer=kinit,
-                bias_initializer=tf.random_normal_initializer(0, 0.1))
+                activation=tf.nn.relu,
+                use_bias=False, name='dense_layer')
 
-        self.output = tf.layers.dense(inputs=self.dense, units=actions, use_bias=False, name='output_layer',
-                kernel_initializer=kinit,
-                kernel_regularizer=tf.nn.l2_loss,
-                bias_initializer=tf.random_normal_initializer(0, 0.1))
+        self.output = tf.layers.dense(inputs=self.dense, units=actions,
+                use_bias=False, name='output_layer')
 
-        reg_loss = tf.add_n(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)) * 0
-        mse = tf.reduce_mean(tf.square(tf.stop_gradient(self.output) - qvals))
-        self.loss = tf.add(mse, reg_loss)
+        mse = tf.reduce_mean(tf.square(self.output - qvals))
+        self.loss = mse
         self.summary_all.append(tf.summary.scalar('loss', self.loss))
 
         self.transform_variables = []
@@ -60,7 +52,6 @@ class network(object):
             if self.scope != get_scope_name(v.name):
                 continue
 
-            #self.summary_all.append(tf.summary.histogram("{}".format(v.name), v))
             ev = tf.placeholder(tf.float32, None, name=get_transform_placeholder_name(v.name))
             self.assign_ops.append(tf.assign(v, ev, validate_shape=False))
 
@@ -76,9 +67,7 @@ class network(object):
             sum_in = tf.reduce_sum(out_in, axis=-1)
             self.summary_all.append(tf.summary.scalar("qvals_input_{0}".format(i), tf.reduce_mean(sum_in)))
 
-            self.summary_all.append(tf.summary.scalar("qvals_diff_{0}".format(i), tf.reduce_mean(sum - sum_in)))
-
-        self.summary_all.append(tf.summary.histogram("actions", tf.argmax(qvals, axis=1)))
+        self.summary_all.append(tf.summary.histogram("actions_pred", tf.argmax(qvals, axis=1)))
         self.summary_all.append(tf.summary.histogram("qvals_input", qvals))
         self.summary_all.append(tf.summary.histogram("qvals_pred", self.output))
 
