@@ -47,15 +47,23 @@ class network(object):
         kinit = tf.contrib.layers.xavier_initializer()
         #kinit = tf.random_normal_initializer(0, 0.01)
 
-        self.dense = tf.layers.dense(inputs=flat, units=config.get('dense_layer_units'),
+        dense_value = tf.layers.dense(inputs=flat, units=config.get('dense_layer_units'),
                 activation=tf.nn.relu,
-                use_bias=False, name='dense_layer')
+                use_bias=False, name='dense_value_layer')
 
-        self.output = tf.layers.dense(inputs=self.dense, units=actions,
-                use_bias=False, name='output_layer')
+        output_value = tf.layers.dense(inputs=dense_value, units=1,
+                use_bias=False, name='output_value_layer')
 
-        mse = tf.reduce_mean(tf.square(self.output - qvals))
-        self.loss = mse
+        dense_adv = tf.layers.dense(inputs=flat, units=config.get('dense_layer_units'),
+                activation=tf.nn.relu,
+                use_bias=False, name='dense_adv_layer')
+        output_adv = tf.layers.dense(inputs=dense_adv, units=actions,
+                use_bias=False, name='output_adv_layer')
+        output_adv_mean = tf.reduce_mean(output_adv, axis=1)
+
+        self.q = output_value + output_adv - tf.expand_dims(output_adv_mean, axis=1)
+
+        self.loss = tf.reduce_mean(tf.square(self.q - qvals))
         self.summary_all.append(tf.summary.scalar('loss', self.loss))
 
         self.transform_variables = []
@@ -66,19 +74,12 @@ class network(object):
 
             self.transform_variables.append(v)
 
-        for i in range(actions):
-            x = tf.one_hot(i, actions)
-            out = self.output * x
-            sum = tf.reduce_sum(out, axis=-1)
-            self.summary_all.append(tf.summary.scalar("qvals_pred_{0}".format(i), tf.reduce_mean(sum)))
-
-            out_in = qvals * x
-            sum_in = tf.reduce_sum(out_in, axis=-1)
-            self.summary_all.append(tf.summary.scalar("qvals_input_{0}".format(i), tf.reduce_mean(sum_in)))
-
         self.summary_all.append(tf.summary.histogram("actions_pred", tf.argmax(qvals, axis=1)))
         self.summary_all.append(tf.summary.histogram("qvals_input", qvals))
-        self.summary_all.append(tf.summary.histogram("qvals_pred", self.output))
+        self.summary_all.append(tf.summary.histogram("q_pred", self.q))
+        self.summary_all.append(tf.summary.histogram("value_pred", output_value))
+        self.summary_all.append(tf.summary.histogram("adv_pred", output_adv))
+        self.summary_all.append(tf.summary.histogram("adv_mean_pred", output_adv_mean))
 
         self.global_step = tf.get_variable('global_step', [], initializer=tf.constant_initializer(0), trainable=False)
         self.learning_rate = 0.00001 + tf.train.exponential_decay(config.get('learning_rate_start'), self.global_step,
@@ -121,7 +122,7 @@ class network(object):
             self.summary_writer.add_summary(summary, global_step)
 
     def predict(self, states):
-        ret = self.session.run([self.output], feed_dict={
+        ret = self.session.run([self.q], feed_dict={
                 self.scope + '/states:0': states,
             })
 
