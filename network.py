@@ -1,6 +1,8 @@
 import tensorflow as tf
 import numpy as np
 
+import collections
+
 def get_param_name(s):
     return s.split('/', 1)[1].replace('/', 'X').split(':')[0]
 def get_scope_name(s):
@@ -22,6 +24,16 @@ class network(object):
         actions = config.get('actions')
         states = tf.placeholder(tf.float32, [None, input_shape[0], input_shape[1], input_shape[2]*state_steps], name='states')
         qvals = tf.placeholder(tf.float32, [None, actions], name='qvals')
+
+        rewards = tf.placeholder(tf.float32, [None], name='episode_rewards')
+        rewards_mva = tf.placeholder(tf.float32, [], name='episode_rewards_mva')
+        self.last_rewards = collections.deque(maxlen=100)
+        rewards_summary = []
+        rewards_summary.append(tf.summary.scalar("episode_rewards_mva", rewards_mva))
+        rewards_summary.append(tf.summary.scalar("episode_rewards_mean", tf.reduce_mean(rewards)))
+        rewards_summary.append(tf.summary.scalar("episode_rewards_max", tf.reduce_max(rewards)))
+        rewards_summary.append(tf.summary.scalar("episode_rewards_min", tf.reduce_min(rewards)))
+        self.update_rewards_ops = tf.summary.merge(rewards_summary)
 
         input_layer = tf.reshape(states, [-1, input_shape[0], input_shape[1], input_shape[2]*state_steps])
 
@@ -48,10 +60,7 @@ class network(object):
 
         self.transform_variables = []
         self.assign_ops = []
-        for v in tf.trainable_variables():
-            if self.scope != get_scope_name(v.name):
-                continue
-
+        for v in tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope):
             ev = tf.placeholder(tf.float32, None, name=get_transform_placeholder_name(v.name))
             self.assign_ops.append(tf.assign(v, ev, validate_shape=False))
 
@@ -150,3 +159,14 @@ class network(object):
 
         #print("{0}: imported params: {1}, total params: {2}".format(self.scope, len(d), len(d1)))
         self.session.run(self.assign_ops, feed_dict=import_d)
+
+    def update_rewards(self, rewards):
+        self.last_rewards.extend(rewards)
+
+        feed_dict = {
+            self.scope + '/episode_rewards:0': rewards,
+            self.scope + '/episode_rewards_mva:0': np.mean(self.last_rewards),
+        }
+
+        s = self.session.run([self.update_rewards_ops, self.global_step], feed_dict)
+        self.summary_writer.add_summary(s[0], s[1])
