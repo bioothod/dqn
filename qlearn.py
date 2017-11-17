@@ -197,6 +197,7 @@ class qlearn(object):
             s = sn
             total_reward += reward
 
+        self.main.update_rewards([total_reward])
         return total_reward
 
     def run(self, num_episodes):
