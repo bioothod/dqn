@@ -3,6 +3,8 @@ import numpy as np
 
 import collections
 
+import layers
+
 def get_param_name(s):
     return s.split('/', 1)[1].replace('/', 'X').split(':')[0]
 def get_scope_name(s):
@@ -37,26 +39,24 @@ class network(object):
 
         input_layer = tf.reshape(states, [-1, input_shape[0], input_shape[1], input_shape[2]*state_steps])
 
-        c1 = tf.layers.conv2d(inputs=states, filters=32, kernel_size=8, strides=4, padding='same',
-                activation=tf.nn.relu)
-        c2 = tf.layers.conv2d(inputs=c1, filters=64, kernel_size=4, strides=2, padding='same',
-                activation=tf.nn.relu)
+        c1 = tf.layers.conv2d(inputs=states, filters=32, kernel_size=8, strides=4, padding='same', activation=tf.nn.relu)
+        c2 = tf.layers.conv2d(inputs=c1, filters=64, kernel_size=4, strides=2, padding='same', activation=tf.nn.relu)
 
         flat = tf.reshape(c2, [-1, np.prod(c2.get_shape().as_list()[1:])])
 
-        kinit = tf.contrib.layers.xavier_initializer()
-        #kinit = tf.random_normal_initializer(0, 0.01)
+        self.dense = layers.noise(inputs=flat, units=config.get('dense_layer_units'),
+                activation=tf.nn.relu, use_bias=False, name='dense_layer')
 
-        self.dense = tf.layers.dense(inputs=flat, units=config.get('dense_layer_units'),
-                activation=tf.nn.relu,
-                use_bias=False, name='dense_layer')
-
-        self.output = tf.layers.dense(inputs=self.dense, units=actions,
+        self.output = layers.noise(inputs=self.dense, units=actions,
                 use_bias=False, name='output_layer')
 
-        mse = tf.reduce_mean(tf.square(self.output - qvals))
-        self.loss = mse
-        self.summary_all.append(tf.summary.scalar('loss', self.loss))
+        def want_perturb(var):
+            if 'conv' in var.name:
+                return False
+            if 'dense_' in var.name:
+                return True
+            if 'output_' in var.name:
+                return True
 
         self.transform_variables = []
         self.assign_ops = []
@@ -65,6 +65,10 @@ class network(object):
             self.assign_ops.append(tf.assign(v, ev, validate_shape=False))
 
             self.transform_variables.append(v)
+
+        mse = tf.reduce_mean(tf.square(self.output - qvals))
+        self.loss = mse
+        self.summary_all.append(tf.summary.scalar('loss', self.loss))
 
         for i in range(actions):
             x = tf.one_hot(i, actions)
