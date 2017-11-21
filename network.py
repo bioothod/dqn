@@ -50,14 +50,6 @@ class network(object):
         self.output = layers.noise(inputs=self.dense, units=actions,
                 use_bias=False, name='output_layer')
 
-        def want_perturb(var):
-            if 'conv' in var.name:
-                return False
-            if 'dense_' in var.name:
-                return True
-            if 'output_' in var.name:
-                return True
-
         self.transform_variables = []
         self.assign_ops = []
         for v in tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope):

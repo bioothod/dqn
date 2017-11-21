@@ -24,10 +24,6 @@ if __name__ == '__main__':
 
     c.put('q_alpha', 1.0)
     c.put('discount_gamma', 0.99)
-    c.put('epsilon_start', 1.0)
-    c.put('epsilon_end', 0.01)
-    c.put('initial_explore_steps', 0)
-    c.put('total_explore_steps', 70000)
 
     c.put('learning_rate_start', 0.00025)
     c.put('learning_rate_step', 100000)

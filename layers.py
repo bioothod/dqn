@@ -11,6 +11,7 @@ from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
 from tensorflow.python.ops import standard_ops
 
+import math
 
 class Noise(base.Layer):
     def __init__(self, units,
@@ -27,7 +28,7 @@ class Noise(base.Layer):
                name=None,
                **kwargs):
         super(Noise, self).__init__(trainable=trainable, name=name,
-                                activity_regularizer=activity_regularizer,
+                                #activity_regularizer=activity_regularizer,
                                 **kwargs)
         self.units = units
         self.activation = activation
@@ -47,31 +48,39 @@ class Noise(base.Layer):
                     'should be defined. Found `None`.')
         self.input_spec = base.InputSpec(min_ndim=2,
                                          axes={-1: input_shape[-1].value})
+
+        boundary = tf.sqrt(1. / float(input_shape[-1].value))
+        kninit = tf.random_uniform_initializer(-boundary, boundary)
+
         self.kernel = self.add_variable('kernel',
                                         shape=[input_shape[-1].value, self.units],
-                                        initializer=self.kernel_initializer,
+                                        initializer=kninit,
                                         regularizer=self.kernel_regularizer,
                                         constraint=self.kernel_constraint,
                                         dtype=self.dtype,
                                         trainable=True)
 
-        sigma_zero = 0.4
-        kninit = tf.random_normal_initializer(0, sigma_zero / tf.sqrt(float(input_shape[-1].value)))
 
         self.kernel_sigma = self.add_variable('kernel_sigma',
                                         shape=[input_shape[-1].value, self.units],
-                                        initializer=kninit,
+                                        initializer=tf.constant_initializer(0.4/math.sqrt(float(input_shape[-1].value))),
                                         dtype=self.dtype,
                                         trainable=True)
-        self.kernel_eps = self.add_variable('kernel_eps',
-                                        shape=[input_shape[-1].value, self.units],
+
+        self.kernel_eps_in = self.add_variable('kernel_eps_in',
+                                        shape=[input_shape[-1].value, 1],
+                                        initializer=tf.zeros_initializer,
+                                        dtype=self.dtype,
+                                        trainable=False)
+        self.kernel_eps_out = self.add_variable('kernel_eps_out',
+                                        shape=[1, self.units],
                                         initializer=tf.zeros_initializer,
                                         dtype=self.dtype,
                                         trainable=False)
         if self.use_bias:
             self.bias = self.add_variable('bias',
                                           shape=[self.units,],
-                                          initializer=self.bias_initializer,
+                                          initializer=kninit,
                                           regularizer=self.bias_regularizer,
                                           constraint=self.bias_constraint,
                                           dtype=self.dtype,
@@ -79,43 +88,39 @@ class Noise(base.Layer):
 
             self.bias_sigma = self.add_variable('bias_sigma',
                                                 shape=[self.units,],
-                                                initializer=kninit,
+                                                initializer=tf.constant_initializer(0.4/math.sqrt(float(input_shape[-1].value))),
                                                 dtype=self.dtype,
                                                 trainable=True)
-            self.bias_eps = self.add_variable('bias_eps',
-                                              shape=[self.units,],
-                                              initializer=tf.zeros_initializer,
-                                              dtype=self.dtype,
-                                              trainable=False)
 
         else:
             self.bias = None
-            self.bias_noise = None
-            self.bias_eps = None
 
-            self.built = True
+        self.built = True
 
     def call(self, inputs):
         func = lambda x: tf.sign(x) * tf.sqrt(tf.abs(x))
-        self.kernel_eps = tf.random_normal(self.kernel_eps.shape)
+        self.kernel_eps_in = func(tf.random_normal(self.kernel_eps_in.shape))
+        self.kernel_eps_out = func(tf.random_normal(self.kernel_eps_out.shape))
         if self.use_bias:
             self.bias_eps = tf.random_normal(self.bias_eps.shape)
+
+        eps = tf.multiply(self.kernel_eps_out, self.kernel_eps_in)
 
         inputs = ops.convert_to_tensor(inputs, dtype=self.dtype)
         shape = inputs.get_shape().as_list()
         if len(shape) > 2:
             # Broadcasting is required for the inputs.
-            outputs = standard_ops.tensordot(inputs, self.kernel + self.kernel_sigma * func(self.kernel_eps),
+            outputs = standard_ops.tensordot(inputs, self.kernel + self.kernel_sigma * eps,
                     [[len(shape) - 1], [0]])
             # Reshape the output back to the original ndim of the input.
             if context.in_graph_mode():
                 output_shape = shape[:-1] + [self.units]
                 outputs.set_shape(output_shape)
         else:
-            outputs = standard_ops.matmul(inputs, self.kernel + self.kernel_sigma * func(self.kernel_eps))
+            outputs = standard_ops.matmul(inputs, self.kernel + self.kernel_sigma * eps)
 
         if self.use_bias:
-            outputs = nn.bias_add(outputs, self.bias + self.bias_sigma * func(self.bias_eps))
+            outputs = nn.bias_add(outputs, self.bias + self.bias_sigma * self.kernel_eps_out)
 
         if self.activation is not None:
             return self.activation(outputs)  # pylint: disable=not-callable
