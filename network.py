@@ -63,7 +63,6 @@ class network(object):
                                 axis=len(self.output.get_shape()) - 1,
                                 keep_dims=True)
         output = tf.clip_by_value(output, 1e-8, 1. - 1e-8)
-        print output
         self.loss = -tf.reduce_sum(dprobs * tf.log(output), axis=len(output.get_shape()) - 1)
 
         #self.summary_all.append(tf.summary.scalar('loss', self.loss))
