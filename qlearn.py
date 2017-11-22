@@ -72,7 +72,7 @@ class qlearn(object):
         self.num_atoms = config.get('num_atoms')
         self.v_max = config.get('v_max')
         self.v_min = config.get('v_min')
-        self.delta_z = (self.v_max - self.v_min) / float(self.num_atoms)
+        self.delta_z = (self.v_max - self.v_min) / float(self.num_atoms - 1)
         self.z = [self.v_min + i * self.delta_z for i in range(self.num_atoms)]
 
         self.batch_size = config.get('batch_size')
@@ -137,7 +137,7 @@ class qlearn(object):
     def get_predicted_action(self, s):
         z = self.follower.predict([s.read()])
         c = np.vstack(z)
-        mass = np.multiply(c, np.array(self.model.z))
+        mass = np.multiply(c, np.array(self.z))
         q = np.sum(mass, axis=1)
         return np.argmax(q)
 
@@ -191,6 +191,8 @@ class qlearn(object):
                     tz = min(self.v_max, max(self.v_min, dr))
                     bj = (tz - self.v_min) / self.delta_z
                     m_l, m_u = math.floor(bj), math.ceil(bj)
+                    #print("idx: {}, a: {}, optimal_actions_idx: {}, j: {}, m_l: {}, m_u: {}, dr: {}, tz, bj: {}".format(
+                    #    idx, a, optimal_actions_idx[idx], j, m_l, m_u, dr, tz, bj))
                     m_prob[a][idx][int(m_l)] += z_next[optimal_actions_idx[idx]][idx][j] * (m_u - bj)
                     m_prob[a][idx][int(m_u)] += z_next[optimal_actions_idx[idx]][idx][j] * (bj - m_l)
 
