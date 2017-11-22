@@ -16,6 +16,10 @@ if __name__ == '__main__':
 
     c.put('game', 'PongNoFrameskip-v4')
 
+    c.put('num_atoms', 51)
+    c.put('v_min', -25.)
+    c.put('v_max', +25.)
+
     c.put('state_steps', 4)
 
     c.put('summary_update_steps', 1)

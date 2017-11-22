@@ -17,13 +17,15 @@ class network(object):
         self.summary_update_steps = config.get('summary_update_steps')
         self.train_steps = 0
 
+        self.num_atoms = config.get('num_atoms')
+
         self.summary_all = []
 
         input_shape = config.get('input_shape')
         state_steps = config.get('state_steps')
         actions = config.get('actions')
         states = tf.placeholder(tf.float32, [None, input_shape[0], input_shape[1], input_shape[2]*state_steps], name='states')
-        qvals = tf.placeholder(tf.float32, [None, actions], name='qvals')
+        dprobs = tf.placeholder(tf.float32, [actions, None, self.num_atoms], name='dprobs')
 
         rewards = tf.placeholder(tf.float32, [None], name='episode_rewards')
         rewards_mva = tf.placeholder(tf.float32, [], name='episode_rewards_mva')
@@ -51,12 +53,20 @@ class network(object):
                 activation=tf.nn.relu,
                 use_bias=False, name='dense_layer')
 
-        self.output = tf.layers.dense(inputs=self.dense, units=actions,
-                use_bias=False, name='output_layer')
+        distribution_list = []
+        for i in range(actions):
+            d = tf.layers.dense(inputs=self.dense, units=self.num_atoms, activation=tf.nn.softmax, use_bias=False, name='output_layer_{}'.format(i))
+            distribution_list.append(d)
 
-        mse = tf.reduce_mean(tf.square(self.output - qvals))
-        self.loss = mse
-        self.summary_all.append(tf.summary.scalar('loss', self.loss))
+        self.output = tf.convert_to_tensor(distribution_list, dtype=distribution_list[0].dtype.base_dtype)
+        output = self.output / tf.reduce_sum(self.output,
+                                axis=len(self.output.get_shape()) - 1,
+                                keep_dims=True)
+        output = tf.clip_by_value(output, 1e-8, 1. - 1e-8)
+        print output
+        self.loss = -tf.reduce_sum(dprobs * tf.log(output), axis=len(output.get_shape()) - 1)
+
+        #self.summary_all.append(tf.summary.scalar('loss', self.loss))
 
         self.transform_variables = []
         self.assign_ops = []
@@ -66,19 +76,8 @@ class network(object):
 
             self.transform_variables.append(v)
 
-        for i in range(actions):
-            x = tf.one_hot(i, actions)
-            out = self.output * x
-            sum = tf.reduce_sum(out, axis=-1)
-            self.summary_all.append(tf.summary.scalar("qvals_pred_{0}".format(i), tf.reduce_mean(sum)))
-
-            out_in = qvals * x
-            sum_in = tf.reduce_sum(out_in, axis=-1)
-            self.summary_all.append(tf.summary.scalar("qvals_input_{0}".format(i), tf.reduce_mean(sum_in)))
-
-        self.summary_all.append(tf.summary.histogram("actions_pred", tf.argmax(qvals, axis=1)))
-        self.summary_all.append(tf.summary.histogram("qvals_input", qvals))
-        self.summary_all.append(tf.summary.histogram("qvals_pred", self.output))
+        self.summary_all.append(tf.summary.histogram("qvals_input", dprobs))
+        self.summary_all.append(tf.summary.histogram("qvals_pred", output))
 
         self.global_step = tf.get_variable('global_step', [], initializer=tf.constant_initializer(0), trainable=False)
         self.learning_rate = 0.00001 + tf.train.exponential_decay(config.get('learning_rate_start'), self.global_step,
@@ -107,11 +106,11 @@ class network(object):
         init = [tf.global_variables_initializer(), tf.local_variables_initializer()]
         self.session.run(init)
 
-    def train(self, states, qvals):
+    def train(self, states, dprobs):
         self.train_steps += 1
         ret = self.session.run([self.summary_merged, self.optimizer_step, self.global_step], feed_dict={
                 self.scope + '/states:0': states,
-                self.scope + '/qvals:0': qvals,
+                self.scope + '/dprobs:0': dprobs,
                 self.scope + '/train_steps:0': self.train_steps,
             })
 

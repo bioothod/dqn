@@ -6,6 +6,7 @@ from copy import deepcopy
 import collections
 import cv2
 import gym
+import math
 import random
 import time
 
@@ -68,6 +69,12 @@ class qlearn(object):
         self.input_shape = config.get('input_shape')
         self.state_steps = config.get('state_steps')
 
+        self.num_atoms = config.get('num_atoms')
+        self.v_max = config.get('v_max')
+        self.v_min = config.get('v_min')
+        self.delta_z = (self.v_max - self.v_min) / float(self.num_atoms)
+        self.z = [self.v_min + i * self.delta_z for i in range(self.num_atoms)]
+
         self.batch_size = config.get('batch_size')
 
         self.train_interval = config.get('train_interval')
@@ -128,7 +135,11 @@ class qlearn(object):
         return action_idx
 
     def get_predicted_action(self, s):
-        return np.argmax(self.follower.predict([s.read()]), axis=1)
+        z = self.follower.predict([s.read()])
+        c = np.vstack(z)
+        mass = np.multiply(c, np.array(self.model.z))
+        q = np.sum(mass, axis=1)
+        return np.argmax(q)
 
     def store(self, data):
         if self.epsilon > self.epsilon_end and self.total_steps > self.initial_explore_steps:
@@ -143,6 +154,8 @@ class qlearn(object):
         states = np.ndarray(shape=states_shape)
         next_states = np.ndarray(shape=states_shape)
 
+        m_prob = [np.zeros((len(batch), self.num_atoms)) for i in range(self.actions)]
+
         q_shape = (len(batch), self.actions)
         qvals = np.ndarray(shape=q_shape)
         next_qvals = np.ndarray(shape=q_shape)
@@ -153,26 +166,35 @@ class qlearn(object):
             states[idx] = s.read()
             next_states[idx] = sn.read()
 
-        qvals = self.main.predict(states)
-        next_qvals = self.follower.predict(next_states)
+        z = self.main.predict(states)
+        z_next = self.follower.predict(next_states)
+
+        zc = np.vstack(z)
+        q = np.sum(np.multiply(zc, np.array(self.z)), axis=1)
+        q = q.reshape(q_shape, order='F')
+        optimal_actions_idx = np.argmax(q, axis=1)
 
         #print("q1: {}".format(qvals))
 
         for idx, e in enumerate(batch):
             s, a, r, sn, done = e
 
-            qmax_next = np.amax(next_qvals[idx])
             if done:
-                qmax_next = 0
+                tz = min(self.v_max, max(self.v_min, r))
+                bj = (tz - self.v_min) / self.delta_z
+                m_l, m_u = math.floor(bj), math.ceil(bj)
+                m_prob[a][idx][int(m_l)] += (m_u - bj)
+                m_prob[a][idx][int(m_u)] += (bj - m_l)
+            else:
+                for j in range(self.num_atoms):
+                    dr = r + self.discount_gamma * self.z[j]
+                    tz = min(self.v_max, max(self.v_min, dr))
+                    bj = (tz - self.v_min) / self.delta_z
+                    m_l, m_u = math.floor(bj), math.ceil(bj)
+                    m_prob[a][idx][int(m_l)] += z_next[optimal_actions_idx[idx]][idx][j] * (m_u - bj)
+                    m_prob[a][idx][int(m_u)] += z_next[optimal_actions_idx[idx]][idx][j] * (bj - m_l)
 
-            current_qa = qvals[idx][a]
-            # clip Q value to [-1;+1] interval
-            #qsa = min(1, max(-1, (1. - self.alpha) * current_qa + self.alpha * (r + self.discount_gamma * qmax_next)))
-            qsa = (1. - self.alpha) * current_qa + self.alpha * (r + self.discount_gamma * qmax_next)
-            qvals[idx][a] = qsa
-
-        #print("q2: {}".format(qvals))
-        self.main.train(states, qvals)
+        self.main.train(states, m_prob)
         if self.main.train_steps % self.update_follower_steps == 0:
             self.follower.import_params(self.main.export_params(), 0)
 
