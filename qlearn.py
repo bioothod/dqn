@@ -157,8 +157,6 @@ class qlearn(object):
         m_prob = [np.zeros((len(batch), self.num_atoms)) for i in range(self.actions)]
 
         q_shape = (len(batch), self.actions)
-        qvals = np.ndarray(shape=q_shape)
-        next_qvals = np.ndarray(shape=q_shape)
 
         for idx, e in enumerate(batch):
             s, a, r, sn, done = e
@@ -174,8 +172,6 @@ class qlearn(object):
         q = q.reshape(q_shape, order='F')
         optimal_actions_idx = np.argmax(q, axis=1)
 
-        #print("q1: {}".format(qvals))
-
         for idx, e in enumerate(batch):
             s, a, r, sn, done = e
 
@@ -183,18 +179,28 @@ class qlearn(object):
                 tz = min(self.v_max, max(self.v_min, r))
                 bj = (tz - self.v_min) / self.delta_z
                 m_l, m_u = math.floor(bj), math.ceil(bj)
-                m_prob[a][idx][int(m_l)] += (m_u - bj)
-                m_prob[a][idx][int(m_u)] += (bj - m_l)
+                if int(m_l) == int(m_u):
+                    m_prob[a][idx][int(m_l)] = 1.0
+                else:
+                    m_prob[a][idx][int(m_l)] += (m_u - bj)
+                    m_prob[a][idx][int(m_u)] += (bj - m_l)
             else:
+                for i in range(self.actions):
+                    m_prob[i][idx] = z[i][idx]
+                m_prob[a][idx] = 0
+
                 for j in range(self.num_atoms):
                     dr = r + self.discount_gamma * self.z[j]
                     tz = min(self.v_max, max(self.v_min, dr))
                     bj = (tz - self.v_min) / self.delta_z
                     m_l, m_u = math.floor(bj), math.ceil(bj)
-                    #print("idx: {}, a: {}, optimal_actions_idx: {}, j: {}, m_l: {}, m_u: {}, dr: {}, tz, bj: {}".format(
-                    #    idx, a, optimal_actions_idx[idx], j, m_l, m_u, dr, tz, bj))
-                    m_prob[a][idx][int(m_l)] += z_next[optimal_actions_idx[idx]][idx][j] * (m_u - bj)
-                    m_prob[a][idx][int(m_u)] += z_next[optimal_actions_idx[idx]][idx][j] * (bj - m_l)
+                    if int(m_l) == int(m_u):
+                        #print("idx: {}, a: {}, r: {}, dr: {}, optimal_actions_idx: {}, j: {}, m_l: {}, m_u: {}, dr: {}, tz: {}, bj: {}".format(
+                        #    idx, a, r, dr, optimal_actions_idx[idx], j, m_l, m_u, dr, tz, bj))
+                        m_prob[a][idx][int(m_l)] += z_next[optimal_actions_idx[idx]][idx][j]
+                    else:
+                        m_prob[a][idx][int(m_l)] += z_next[optimal_actions_idx[idx]][idx][j] * (m_u - bj)
+                        m_prob[a][idx][int(m_u)] += z_next[optimal_actions_idx[idx]][idx][j] * (bj - m_l)
 
         self.main.train(states, m_prob)
         if self.main.train_steps % self.update_follower_steps == 0:
