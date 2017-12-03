@@ -56,16 +56,18 @@ class network(object):
         distribution_list = []
         for i in range(actions):
             d = tf.layers.dense(inputs=self.dense, units=self.num_atoms, activation=tf.nn.softmax, use_bias=False, name='output_layer_{}'.format(i))
+            self.summary_all.append(tf.summary.histogram('output_layer_{}'.format(i), d))
             distribution_list.append(d)
 
         self.output = tf.convert_to_tensor(distribution_list, dtype=distribution_list[0].dtype.base_dtype)
-        output = self.output / tf.reduce_sum(self.output,
+        self.output /= tf.reduce_sum(self.output,
                                 axis=len(self.output.get_shape()) - 1,
                                 keep_dims=True)
-        output = tf.clip_by_value(output, 1e-8, 1. - 1e-8)
-        self.loss = -tf.reduce_sum(dprobs * tf.log(output), axis=len(output.get_shape()) - 1)
+        self.output = tf.clip_by_value(self.output, 1e-8, 1. - 1e-8)
+        self.loss = -tf.reduce_sum(dprobs * tf.log(self.output), axis=len(self.output.get_shape()) - 1)
+        self.loss = tf.reduce_sum(self.loss, axis=0)
 
-        #self.summary_all.append(tf.summary.scalar('loss', self.loss))
+        self.summary_all.append(tf.summary.scalar('loss', tf.reduce_mean(self.loss)))
 
         self.transform_variables = []
         self.assign_ops = []
@@ -76,7 +78,7 @@ class network(object):
             self.transform_variables.append(v)
 
         self.summary_all.append(tf.summary.histogram("qvals_input", dprobs))
-        self.summary_all.append(tf.summary.histogram("qvals_pred", output))
+        self.summary_all.append(tf.summary.histogram("qvals_pred", self.output))
 
         self.global_step = tf.get_variable('global_step', [], initializer=tf.constant_initializer(0), trainable=False)
         self.learning_rate = 0.00001 + tf.train.exponential_decay(config.get('learning_rate_start'), self.global_step,
