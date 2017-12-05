@@ -103,3 +103,5 @@ ENV/
 .*.sw*
 tags
 output/
+
+*~
