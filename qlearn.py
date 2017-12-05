@@ -154,6 +154,10 @@ class qlearn(object):
             next_states[idx] = sn.read()
 
         qvals = self.main.predict(states)
+
+        next_qvals_online = self.main.predict(next_states)
+        next_actions_online = np.argmax(next_qvals_online, axis=1)
+
         next_qvals = self.follower.predict(next_states)
 
         #print("q1: {}".format(qvals))
@@ -161,7 +165,7 @@ class qlearn(object):
         for idx, e in enumerate(batch):
             s, a, r, sn, done = e
 
-            qmax_next = np.amax(next_qvals[idx])
+            qmax_next = np.amax(next_qvals[idx][next_actions_online[idx]])
             if done:
                 qmax_next = 0
 
