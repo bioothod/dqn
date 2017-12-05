@@ -3,6 +3,8 @@ import numpy as np
 
 import collections
 
+import layers
+
 def get_param_name(s):
     return s.split('/', 1)[1].replace('/', 'X').split(':')[0]
 def get_scope_name(s):
@@ -37,27 +39,22 @@ class network(object):
 
         input_layer = tf.reshape(states, [-1, input_shape[0], input_shape[1], input_shape[2]*state_steps])
 
-        c1 = tf.layers.conv2d(inputs=states, filters=32, kernel_size=8, strides=4, padding='same',
-                activation=tf.nn.relu)
-        c2 = tf.layers.conv2d(inputs=c1, filters=64, kernel_size=4, strides=2, padding='same',
-                activation=tf.nn.relu)
+        c1 = tf.layers.conv2d(inputs=states, filters=32, kernel_size=8, strides=4, padding='same', activation=tf.nn.relu)
+        c2 = tf.layers.conv2d(inputs=c1, filters=64, kernel_size=4, strides=2, padding='same', activation=tf.nn.relu)
 
         flat = tf.reshape(c2, [-1, np.prod(c2.get_shape().as_list()[1:])])
 
-        kinit = tf.contrib.layers.xavier_initializer()
-        #kinit = tf.random_normal_initializer(0, 0.01)
-
-        dense_value = tf.layers.dense(inputs=flat, units=config.get('dense_layer_units'),
+        dense_value = layers.noise(inputs=flat, units=config.get('dense_layer_units'),
                 activation=tf.nn.relu,
                 use_bias=False, name='dense_value_layer')
 
-        output_value = tf.layers.dense(inputs=dense_value, units=1,
+        output_value = layers.noise(inputs=dense_value, units=1,
                 use_bias=False, name='output_value_layer')
 
-        dense_adv = tf.layers.dense(inputs=flat, units=config.get('dense_layer_units'),
+        dense_adv = layers.noise(inputs=flat, units=config.get('dense_layer_units'),
                 activation=tf.nn.relu,
                 use_bias=False, name='dense_adv_layer')
-        output_adv = tf.layers.dense(inputs=dense_adv, units=actions,
+        output_adv = layers.noise(inputs=dense_adv, units=actions,
                 use_bias=False, name='output_adv_layer')
         output_adv_mean = tf.reduce_mean(output_adv, axis=1)
 

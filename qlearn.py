@@ -80,11 +80,6 @@ class qlearn(object):
         self.actions = self.env.action_space.n
         config.put('actions', self.actions) # used in network to create N outputs, one per action
 
-        self.epsilon_start = config.get('epsilon_start')
-        self.epsilon_end = config.get('epsilon_end')
-        self.initial_explore_steps = config.get('initial_explore_steps')
-        self.total_explore_steps = config.get('total_explore_steps')
-        self.epsilon = self.epsilon_start
         self.alpha = config.get('q_alpha')
         self.discount_gamma = config.get('discount_gamma')
 
@@ -120,10 +115,7 @@ class qlearn(object):
         return self.new_state(obs)
 
     def get_action(self, s):
-        if np.random.rand() <= self.epsilon:
-            action_idx = self.env.action_space.sample()
-        else:
-            action_idx = self.get_predicted_action(s)
+        action_idx = self.get_predicted_action(s)
 
         return action_idx
 
@@ -131,9 +123,6 @@ class qlearn(object):
         return np.argmax(self.follower.predict([s.read()]), axis=1)
 
     def store(self, data):
-        if self.epsilon > self.epsilon_end and self.total_steps > self.initial_explore_steps:
-            self.epsilon -= (self.epsilon_start - self.epsilon_end) / self.total_explore_steps
-
         self.history.append(data)
 
     def train(self):
@@ -211,6 +200,6 @@ class qlearn(object):
 
             rewards.append(reward)
 
-            print("{:4d}: steps: {:6d}, epsilon: {:.2f}, reward: {:2.1f}, average reward per {:3d} last episodes: {:.2f}".format(
-                i, self.total_steps, self.epsilon,
+            print("{:4d}: steps: {:6d}, reward: {:2.1f}, average reward per {:3d} last episodes: {:.2f}".format(
+                i, self.total_steps,
                 reward, rewards.size(), np.mean(rewards.whole())))
