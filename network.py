@@ -71,7 +71,7 @@ class network(object):
         self.summary_all.append(tf.summary.scalar("xentropy_mean", tf.reduce_mean(xentropy)))
 
         print("qloss: {}, xentropy: {}".format(self.q_loss, xentropy))
-        self.loss = self.q_loss + xentropy
+        self.loss = self.q_loss + xentropy*0.01
         self.summary_all.append(tf.summary.scalar('loss', tf.reduce_mean(self.loss)))
 
         self.transform_variables = []
