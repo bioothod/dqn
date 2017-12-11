@@ -58,10 +58,21 @@ class network(object):
                 use_bias=False, name='output_adv_layer')
         output_adv_mean = tf.reduce_mean(output_adv, axis=1)
 
-        self.q = tf.stop_gradient(output_value + output_adv) - tf.expand_dims(output_adv_mean, axis=1)
-        self.loss = tf.reduce_mean(tf.square(self.q - qvals))
+        self.q = tf.stop_gradient(output_value) + output_adv - tf.expand_dims(output_adv_mean, axis=1)
+        self.q_loss = tf.reduce_mean(tf.square(self.q - qvals), axis=-1)
+        self.summary_all.append(tf.summary.scalar('q_loss', tf.reduce_mean(self.q_loss)))
 
-        self.summary_all.append(tf.summary.scalar('loss', self.loss))
+        probs = tf.nn.softmax(qvals)
+        print probs
+        log_softmax = tf.nn.log_softmax(self.q)
+        print log_softmax
+
+        xentropy = tf.reduce_sum(probs * log_softmax, axis=-1)
+        self.summary_all.append(tf.summary.scalar("xentropy_mean", tf.reduce_mean(xentropy)))
+
+        print("qloss: {}, xentropy: {}".format(self.q_loss, xentropy))
+        self.loss = self.q_loss + xentropy
+        self.summary_all.append(tf.summary.scalar('loss', tf.reduce_mean(self.loss)))
 
         self.transform_variables = []
         self.assign_ops = []
