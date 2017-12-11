@@ -23,9 +23,9 @@ class network(object):
 
         input_shape = config.get('input_shape')
         state_steps = config.get('state_steps')
-        actions = config.get('actions')
+        num_actions = config.get('actions')
         states = tf.placeholder(tf.float32, [None, input_shape[0], input_shape[1], input_shape[2]*state_steps], name='states')
-        qvals = tf.placeholder(tf.float32, [None, actions], name='qvals')
+        qvals = tf.placeholder(tf.float32, [None, num_actions], name='qvals')
 
         rewards = tf.placeholder(tf.float32, [None], name='episode_rewards')
         rewards_mva = tf.placeholder(tf.float32, [], name='episode_rewards_mva')
@@ -54,13 +54,13 @@ class network(object):
         dense_adv = layers.noise(inputs=flat, units=config.get('dense_layer_units'),
                 activation=tf.nn.relu,
                 use_bias=False, name='dense_adv_layer')
-        output_adv = layers.noise(inputs=dense_adv, units=actions,
+        output_adv = layers.noise(inputs=dense_adv, units=num_actions,
                 use_bias=False, name='output_adv_layer')
         output_adv_mean = tf.reduce_mean(output_adv, axis=1)
 
-        self.q = output_value + output_adv - tf.expand_dims(output_adv_mean, axis=1)
-
+        self.q = tf.stop_gradient(output_value + output_adv) - tf.expand_dims(output_adv_mean, axis=1)
         self.loss = tf.reduce_mean(tf.square(self.q - qvals))
+
         self.summary_all.append(tf.summary.scalar('loss', self.loss))
 
         self.transform_variables = []
