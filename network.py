@@ -62,16 +62,13 @@ class network(object):
         self.q_loss = tf.reduce_mean(tf.square(self.q - qvals), axis=-1)
         self.summary_all.append(tf.summary.scalar('q_loss', tf.reduce_mean(self.q_loss)))
 
-        probs = tf.nn.softmax(qvals)
-        print probs
-        log_softmax = tf.nn.log_softmax(self.q)
-        print log_softmax
+        probs = tf.nn.softmax(output_adv)
+        log_softmax = tf.nn.log_softmax(output_adv)
 
         xentropy = tf.reduce_sum(probs * log_softmax, axis=-1)
         self.summary_all.append(tf.summary.scalar("xentropy_mean", tf.reduce_mean(xentropy)))
 
-        print("qloss: {}, xentropy: {}".format(self.q_loss, xentropy))
-        self.loss = self.q_loss + xentropy*0.01
+        self.loss = self.q_loss + xentropy*0.001
         self.summary_all.append(tf.summary.scalar('loss', tf.reduce_mean(self.loss)))
 
         self.transform_variables = []
